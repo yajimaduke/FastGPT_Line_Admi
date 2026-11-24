@@ -8,6 +8,9 @@
     },
     "api/wechat.js": {
       "maxDuration": 40
+    },
+    "api/telegram.js": {
+      "maxDuration": 40
     }
   }
 }
