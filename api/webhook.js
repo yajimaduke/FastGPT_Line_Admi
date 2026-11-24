@@ -1,6 +1,6 @@
 const { createHmac, timingSafeEqual } = require('node:crypto');
 
-const FASTGPT_URL = 'https://cloud.fastgpt.cn/api/v1/chat/completions';
+const FASTGPT_URL = 'https://cloud.fastgpt.io/api/v1/chat/completions';
 const LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply';
 const FALLBACK_REPLY = '抱歉，暫時無法回覆，請稍後再試。';
 
