@@ -4,6 +4,17 @@ const FASTGPT_URL = 'https://cloud.fastgpt.io/api/v1/chat/completions';
 const LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply';
 const FALLBACK_REPLY = '抱歉，暫時無法回覆，請稍後再試。';
 
+function formatLineReply(markdown) {
+  return markdown
+    .replace(/^[ \t]{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/gm, '$1')
+    .replace(/^([ \t]*)[-*+][ \t]+/gm, '$1• ')
+    .replace(/(\*\*|__)(?=\S)(.+?)\1/g, '$2')
+    .replace(/(^|[\s(])([*_])(?=\S)([^\n]+?)\2(?=$|[\s).,!?:])/gm, '$1$3')
+    .replace(/\[((?:\\.|[^[\]\\]|\[[^[\]]*\])+)\]\((https?:\/\/(?:[^\s()]|\([^\s()]*\))+)\)([.,;!?]?)/g,
+      (_, label, url, punctuation) => label.replace(/\\([\[\]])/g, '$1') + punctuation + '\n' + url)
+    .trim();
+}
+
 function validSignature(body, signature, secret) {
   if (typeof signature !== 'string') return false;
   const expected = createHmac('sha256', secret).update(body).digest();
@@ -55,6 +66,7 @@ async function replyToEvent(event, config) {
     }
   }
 
+  const lineText = formatLineReply(reply) || FALLBACK_REPLY;
   const response = await fetch(LINE_REPLY_URL, {
     method: 'POST',
     headers: {
@@ -63,7 +75,7 @@ async function replyToEvent(event, config) {
     },
     body: JSON.stringify({
       replyToken: event.replyToken,
-      messages: [{ type: 'text', text: reply.slice(0, 5000).replace(/[\uD800-\uDBFF]$/, '') }],
+      messages: [{ type: 'text', text: lineText.slice(0, 5000).replace(/[\uD800-\uDBFF]$/, '') }],
     }),
     signal: AbortSignal.timeout(5000),
   });
