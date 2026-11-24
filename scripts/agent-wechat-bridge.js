@@ -1,5 +1,7 @@
 const { execFile, spawn } = require('node:child_process');
 const { createHash } = require('node:crypto');
+const { existsSync } = require('node:fs');
+const { delimiter, join } = require('node:path');
 const { createInterface } = require('node:readline');
 const { promisify } = require('node:util');
 const { getFastGPTReply } = require('../lib/fastgpt');
@@ -10,17 +12,37 @@ const account = config.WECHAT_ACCOUNT || 'chatadmission';
 const wxArgs = ['--json', '--account', account];
 const { FASTGPT_API_KEY, ...wxEnvironment } = config;
 
-async function wx(...args) {
-  const { stdout } = await run('wx', [...wxArgs, ...args], { timeout: 45000, windowsHide: true, env: wxEnvironment });
-  return JSON.parse(stdout);
+function resolveWx() {
+  if (process.platform !== 'win32') return { file: 'wx', args: [] };
+  for (const entry of (config.Path || config.PATH || '').split(delimiter)) {
+    const directory = entry.trim().replace(/^"|"$/g, '');
+    if (!directory) continue;
+    const executable = join(directory, 'wx.exe');
+    if (existsSync(executable)) return { file: executable, args: [] };
+    const launcher = join(directory, 'node_modules', '@agent-wechat', 'cli', 'scripts', 'native-launcher.mjs');
+    if (existsSync(join(directory, 'wx.cmd')) && existsSync(launcher)) {
+      return { file: process.execPath, args: [launcher] };
+    }
+  }
+  throw new Error('Agent WeChat executable was not found on PATH');
 }
 
 async function main() {
   if (!FASTGPT_API_KEY || !config.FASTGPT_APP_ID) {
     throw new Error('Set FASTGPT_API_KEY and FASTGPT_APP_ID');
   }
+  const command = resolveWx();
+  const argsFor = (...args) => [...command.args, ...wxArgs, ...args];
+  async function wx(...args) {
+    const { stdout } = await run(command.file, argsFor(...args), {
+      timeout: 45000,
+      windowsHide: true,
+      env: wxEnvironment,
+    });
+    return JSON.parse(stdout);
+  }
 
-  const stream = spawn('wx', [...wxArgs, 'events', 'watch'], {
+  const stream = spawn(command.file, argsFor('events', 'watch'), {
     stdio: ['ignore', 'pipe', 'ignore'],
     windowsHide: true,
     env: wxEnvironment,
@@ -61,7 +83,7 @@ async function main() {
         console.error('Could not process a WeChat event');
       }
     }
-    if (await stopped) throw new Error('Agent WeChat event stream stopped');
+    if (await stopped) throw new Error('Agent WeChat event stream stopped. Run wx events watch to see its error.');
   } finally {
     lines.close();
     stream.kill();
@@ -70,7 +92,7 @@ async function main() {
 }
 
 main().catch(error => {
-  console.error(error.message.startsWith('Set FASTGPT')
+  console.error((/^(Set FASTGPT|Agent WeChat)/).test(error.message)
     ? error.message : 'Could not connect to Agent WeChat. Check wx serve and the account alias.');
   process.exitCode = 1;
 });
