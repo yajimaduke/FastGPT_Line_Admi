@@ -1,20 +1,7 @@
 const { createHmac, timingSafeEqual } = require('node:crypto');
-const { decodeHTMLStrict } = require('entities');
+const { getFastGPTReply } = require('../lib/fastgpt');
 
-const FASTGPT_URL = 'https://cloud.fastgpt.io/api/v1/chat/completions';
 const LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply';
-const FALLBACK_REPLY = '抱歉，暫時無法回覆，請稍後再試。';
-
-function formatLineReply(markdown) {
-  const text = markdown
-    .replace(/^[ \t]{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/gm, '$1')
-    .replace(/^([ \t]*)[-*+][ \t]+/gm, '$1• ')
-    .replace(/(\*\*|__)(?=\S)(.+?)\1/g, '$2')
-    .replace(/(^|[\s(])([*_])(?=\S)([^\n]+?)\2(?=$|[\s).,!?:])/gm, '$1$3')
-    .replace(/\[((?:\\.|[^[\]\\]|\[[^[\]]*\])+)\]\((https?:\/\/(?:[^\s()]|\([^\s()]*\))+)\)([.,;!?]?)/g,
-      (_, label, url, punctuation) => label.replace(/\\([\[\]])/g, '$1') + punctuation + '\n' + url);
-  return decodeHTMLStrict(text).trim();
-}
 
 function validSignature(body, signature, secret) {
   if (typeof signature !== 'string') return false;
@@ -29,45 +16,7 @@ async function replyToEvent(event, config) {
   const chatId = [source?.type, source?.groupId ?? source?.roomId, source?.userId]
     .filter(Boolean).join(':');
 
-  let reply = FALLBACK_REPLY;
-  try {
-    const response = await fetch(FASTGPT_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${config.FASTGPT_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        appId: config.FASTGPT_APP_ID,
-        chatId: source?.userId ? chatId : undefined,
-        stream: false,
-        detail: false,
-        messages: [{ role: 'user', content: event.message.text }],
-      }),
-      signal: AbortSignal.timeout(25_000),
-    });
-    if (response.ok) {
-      const data = await response.json();
-      const content = data?.choices?.[0]?.message?.content;
-      if (typeof content === 'string' && content.trim()) {
-        reply = content;
-      } else {
-        console.error('FastGPT returned no reply text');
-      }
-    } else {
-      console.error(`FastGPT HTTP ${response.status}`);
-    }
-  } catch (error) {
-    if (error?.name === 'TimeoutError') {
-      console.error('FastGPT request timed out');
-    } else if (error instanceof SyntaxError) {
-      console.error('FastGPT returned invalid JSON');
-    } else {
-      console.error('FastGPT connection failed');
-    }
-  }
-
-  const lineText = formatLineReply(reply) || FALLBACK_REPLY;
+  const lineText = await getFastGPTReply(event.message.text, source?.userId ? chatId : undefined, config);
   const response = await fetch(LINE_REPLY_URL, {
     method: 'POST',
     headers: {
