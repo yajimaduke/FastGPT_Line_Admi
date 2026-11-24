@@ -52,6 +52,7 @@ async function sendReply(message, config) {
   if (!response.ok || data.errcode !== 0) {
     throw new Error(`WeChat reply failed (${Number(data.errcode) || response.status})`);
   }
+  console.info('WeChat accepted the reply');
 }
 
 module.exports = async function handler(req, res) {
@@ -69,10 +70,15 @@ module.exports = async function handler(req, res) {
   const expected = createHash('sha1').update([config.WECHAT_WEBHOOK_TOKEN, timestamp, nonce].sort().join('')).digest();
   if (!timestamp || !nonce || !/^[0-9a-f]{40}$/i.test(signature) ||
       !timingSafeEqual(expected, Buffer.from(signature, 'hex'))) {
+    console.warn('WeChat callback signature rejected');
     return res.status(403).send('Invalid signature');
   }
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  if (req.method === 'GET') return res.status(200).send(query.get('echostr') || '');
+  if (req.method === 'GET') {
+    console.info('WeChat verification signature accepted');
+    return res.status(200).send(query.get('echostr') || '');
+  }
+  console.info('WeChat message callback signature accepted');
 
   const chunks = [];
   let bytes = 0;
@@ -84,14 +90,17 @@ module.exports = async function handler(req, res) {
   }
   const xml = Buffer.concat(chunks).toString('utf8');
   if (/<!DOCTYPE|<!ENTITY/i.test(xml) || XMLValidator.validate(xml) !== true) {
+    console.warn('WeChat callback contained invalid XML');
     return res.status(400).send('Invalid XML');
   }
   const message = parser.parse(xml).xml;
   if (message?.MsgType === 'text' && typeof message.FromUserName === 'string' &&
       typeof message.Content === 'string' && message.Content.trim()) {
     if (!config.WECHAT_APP_ID || !config.WECHAT_APP_SECRET || !config.FASTGPT_API_KEY || !config.FASTGPT_APP_ID) {
+      console.error('WeChat reply configuration is incomplete');
       return res.status(503).send('WeChat replies are not configured');
     }
+    console.info('WeChat text message queued for reply');
     waitUntil(sendReply(message, config).catch(error => {
       console.error(/^WeChat (token|reply) failed \(\d+\)$/.test(error.message)
         ? error.message : 'WeChat API request failed');
