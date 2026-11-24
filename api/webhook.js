@@ -34,12 +34,25 @@ async function replyToEvent(event, config) {
       }),
       signal: AbortSignal.timeout(8000),
     });
-    if (!response.ok) throw new Error(`FastGPT HTTP ${response.status}`);
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (typeof content === 'string' && content.trim()) reply = content;
-  } catch {
-    console.error('FastGPT request failed');
+    if (response.ok) {
+      const data = await response.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (typeof content === 'string' && content.trim()) {
+        reply = content;
+      } else {
+        console.error('FastGPT returned no reply text');
+      }
+    } else {
+      console.error(`FastGPT HTTP ${response.status}`);
+    }
+  } catch (error) {
+    if (error?.name === 'TimeoutError') {
+      console.error('FastGPT request timed out');
+    } else if (error instanceof SyntaxError) {
+      console.error('FastGPT returned invalid JSON');
+    } else {
+      console.error('FastGPT connection failed');
+    }
   }
 
   const response = await fetch(LINE_REPLY_URL, {
