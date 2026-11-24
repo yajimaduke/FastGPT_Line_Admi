@@ -2,6 +2,7 @@
   "dependencies": {
     "@vercel/functions": "3.11.3",
     "entities": "6.0.1",
+    "fast-xml-parser": "5.12.1",
     "twilio": "6.3.1"
   }
 }

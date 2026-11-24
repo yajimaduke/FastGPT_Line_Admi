@@ -5,6 +5,9 @@
     },
     "api/whatsapp.js": {
       "maxDuration": 40
+    },
+    "api/wechat.js": {
+      "maxDuration": 40
     }
   }
 }
