@@ -1,18 +1,19 @@
 const { createHmac, timingSafeEqual } = require('node:crypto');
+const { decodeHTMLStrict } = require('entities');
 
 const FASTGPT_URL = 'https://cloud.fastgpt.io/api/v1/chat/completions';
 const LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply';
 const FALLBACK_REPLY = '抱歉，暫時無法回覆，請稍後再試。';
 
 function formatLineReply(markdown) {
-  return markdown
+  const text = markdown
     .replace(/^[ \t]{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/gm, '$1')
     .replace(/^([ \t]*)[-*+][ \t]+/gm, '$1• ')
     .replace(/(\*\*|__)(?=\S)(.+?)\1/g, '$2')
     .replace(/(^|[\s(])([*_])(?=\S)([^\n]+?)\2(?=$|[\s).,!?:])/gm, '$1$3')
     .replace(/\[((?:\\.|[^[\]\\]|\[[^[\]]*\])+)\]\((https?:\/\/(?:[^\s()]|\([^\s()]*\))+)\)([.,;!?]?)/g,
-      (_, label, url, punctuation) => label.replace(/\\([\[\]])/g, '$1') + punctuation + '\n' + url)
-    .trim();
+      (_, label, url, punctuation) => label.replace(/\\([\[\]])/g, '$1') + punctuation + '\n' + url);
+  return decodeHTMLStrict(text).trim();
 }
 
 function validSignature(body, signature, secret) {
