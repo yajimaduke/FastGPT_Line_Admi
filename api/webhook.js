@@ -32,7 +32,7 @@ async function replyToEvent(event, config) {
         detail: false,
         messages: [{ role: 'user', content: event.message.text }],
       }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(25_000),
     });
     if (response.ok) {
       const data = await response.json();
